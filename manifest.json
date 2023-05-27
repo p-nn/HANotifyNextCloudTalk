@@ -1,7 +1,8 @@
 {
-  "domain": "https://github.com/p-nn/HANotifyNextCloudTalk",
-  "name": "NextCloud Talk",
+  "domain": "nextcloudtalk",
+  "name": "nextcloudtalk",
   "documentation": "https://github.com/p-nn/HANotifyNextCloudTalkk",
+  "version":    "1.0.1",
   "requirements": [
     "requests"
   ],

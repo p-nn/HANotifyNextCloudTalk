@@ -1,18 +1,21 @@
+"""Summary data from Nextcoud."""
 import sys
 import time
 from threading import Thread
 import requests
 
 # based on ha-matrix-client
-class Room(object):
+class Room():
+    """ docstring """
     token: str = ""
     lastreadmessage: int = 0
     unreadmessages: int = 0
     listen: bool = False
 
 
-class NextCloudTalkClient(object):
-    pull_interval = 5 # pull interval
+class NextCloudTalkClient():
+    """ docstring """
+    poll_interval = 5 # poll interval
     api_version = 'v4'
 
     def __init__(self, base_url, username, password):
@@ -41,48 +44,51 @@ class NextCloudTalkClient(object):
             self.api_version = 'v1'
         self.handler = None
 
-    def joinRoom(self, room):
-        if room in self.rooms.keys():
+    def join_room(self, room):
+        """ docstring """
+        if room in self.rooms:
             self.rooms[room].listen = True
         else:
-            r = Room()
-            r.token = ''
-            r.lastreadmessage = 0
-            r.unreadmessages = 0
-            r.listen = True
-            self.rooms[room] = r
-            self.getRoomsInfo()
+            raw_room = Room()
+            raw_room.token = ''
+            raw_room.lastreadmessage = 0
+            raw_room.unreadmessages = 0
+            raw_room.listen = True
+            self.rooms[room] = raw_room
+            self.get_rooms_info()
 
-    def getRoomsInfo(self):
+    def get_rooms_info(self):
+        """ docstring """
         try:
             request_rooms = self.session.get(self.url + "/"+self.api_version+"/room")
             room_json = request_rooms.json()
             server_rooms = room_json["ocs"]["data"]
-            for roomInfo in server_rooms:
-                if not (roomInfo["name"] in self.rooms.keys()):
-                    self.rooms[roomInfo["name"]] = Room()
-                    self.rooms[roomInfo["name"]].token = roomInfo["token"]
-            for client_room_name in self.rooms.keys():
-                client_room = self.rooms[client_room_name]
+            for room_info in server_rooms:
+                if not room_info["name"] in self.rooms:
+                    self.rooms[room_info["name"]] = Room()
+                    self.rooms[room_info["name"]].token = room_info["token"]
+            for client_room_name, client_room in self.rooms.items():
+                # client_room = self.rooms[client_room_name]
                 server_room = None
-                for roomInfo in server_rooms:
-                    if roomInfo["name"] == client_room_name:
-                        server_room = roomInfo
-                if server_room == None:                # create conversation for user
+                for room_info in server_rooms:
+                    if room_info["name"] == client_room_name:
+                        server_room = room_info
+                if server_room is None:                # create conversation for user
                     data = {"roomType": 1, "invite": client_room_name, "roomName": client_room_name}
                     resp = self.session.post(self.url + "/"+self.api_version+"/room", data=data)
                     resp_json = resp.json()
                     created_rooms = resp_json["ocs"]["data"]
-                    for roomInfo in created_rooms:
-                        if roomInfo["name"] == client_room_name:
-                            server_room = roomInfo
-                if not (server_room == None):
+                    for room_info in created_rooms:
+                        if room_info["name"] == client_room_name:
+                            server_room = room_info
+                if server_room is not None:
                     client_room.token = server_room["token"]
                     client_room.lastreadmessage = server_room["lastReadMessage"]
                     client_room.unreadmessages = server_room["unreadMessages"]
-        except Exception as e:
-            print(e)
+        except Exception as error:
+            print(error)
     def send_message(self, room_name, message="", **kwargs):
+        """ docstring """
         roomtoken = self.rooms[room_name].token
         data = {"token": roomtoken, "message": message, "actorType": "", "actorId": "", "actorDisplayName": "",
                 "timestamp": 0, "messageParameters": []}
@@ -96,6 +102,7 @@ class NextCloudTalkClient(object):
         return resp.status_code
 
     def upload_file(self,file_name, file_path):
+        """ docstring """
         #
         #        filename = path_file.split('/')[-1:][0]
         #        if "attachment_name" in kwargs:
@@ -104,13 +111,14 @@ class NextCloudTalkClient(object):
         #print('attachments_url',attachments_url)
         file = open(file_path,'rb')
         resp = self.session.put(attachments_url, data=file)
-        if not(resp.status_code in (200,201,202,204)):
+        if not resp.status_code in (200,201,202,204):
             #print('upload error',resp.status_code,resp.content)
             return resp.status_code
         #print(resp.content)
         return resp.status_code
 
     def send_file(self,room_name, file_name):
+        """ docstring """
         roomtoken = self.rooms[room_name].token
         share_url = self.base_url+ '/ocs/v2.php/apps/files_sharing/api/v1/shares'
         #print(share_url,self.attachments_folder+'/'+filename)
@@ -123,15 +131,18 @@ class NextCloudTalkClient(object):
         return resp.status_code
 
     def mark_read_message(self, room_name, id_message):
+        """ docstring """
         data = {"lastReadMessage": id_message}
         resp = self.session.post(self.url + "/v1/chat/" + self.rooms[room_name].token + "/read", data=data)
         return resp.status_code
 
     def clear_chat(self, roomtoken):
+        """ docstring """
         resp = self.session.delete(self.url + "/v1/chat/" + roomtoken)
         return resp.status_code
 
     def receive_message(self, room_name):
+        """ docstring """
         room = self.rooms[room_name]
         self.session.headers.update({"X-Chat-Last-Given": str(room.lastreadmessage)})
         resp = self.session.get(self.url + "/v1/chat/" + room.token + "?lookIntoFuture=1&setReadMarker=0&limit=" + str(
@@ -145,28 +156,29 @@ class NextCloudTalkClient(object):
         return messages
 
     def _sync(self, timeout_ms=30000):
-        self.getRoomsInfo()
-        for room_name in self.rooms.keys():
-            room = self.rooms[room_name]
+        self.get_rooms_info()   
+        for room_name,room in self.rooms.items():
+            # room = self.rooms[room_name]
             # print(room_name,"token=", room.token, room.listen)
             if room.listen and (not (room.token == "") and room.unreadmessages > 0):
                 mmm = self.receive_message(room_name)
                 for msg in mmm:
-                    if not (self.handler == None):
-                        if self.handler(room_name, msg['actorId'], msg["actorDisplayName"], msg["message"]): #actorDisplayName
+                    if self.handler is not None:
+                        if self.handler(room_name, msg['actorId'], msg["actorDisplayName"], msg["message"]):
                             self.mark_read_message(room_name, msg["id"])
 
     def listen_forever(self, timeout_ms=30000, exception_handler=None, bad_sync_timeout=5):
+        """ docstring """
         _bad_sync_timeout = bad_sync_timeout
         self.should_listen = True
-        while (self.should_listen):
+        while self.should_listen:
             try:
                 self._sync(timeout_ms)
-                time.sleep(self.pull_interval)
+                time.sleep(self.poll_interval)
                 _bad_sync_timeout = bad_sync_timeout
-            except Exception as e:
+            except Exception as error:
                 if exception_handler is not None:
-                    exception_handler(e)
+                    exception_handler(error)
                 else:
                     raise
 
@@ -187,7 +199,7 @@ class NextCloudTalkClient(object):
             self.should_listen = True
             thread.start()
         except RuntimeError:
-            e = sys.exc_info()[0]
+            error = sys.exc_info()[0]
 
     def stop_listener_thread(self):
         """ Stop listener thread running in the background
